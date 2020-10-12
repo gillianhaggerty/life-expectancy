@@ -1,0 +1,192 @@
+---
+title: "EDA_long_form"
+author: "Gillian Haggerty"
+date: "12/6/2019"
+output:
+  html_document: 
+    toc: true
+    toc_float: true
+    highlight: "tango" 
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, message = FALSE}
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(psych)
+library(modelr)
+library(dataMaid)
+```
+# Introduction
+**The data source that I'm looking at concerns the life expectancy for 193 countries based on a set of variables that range from economic conditions to disease prevalence and mortality rates. The data is collected over 15 years for most countries and can show trends within country as well as across countries. The scope is also intriguing to me—this looks at nearly 200 countries categorized as developing versus developed—and attempts to make broad judgements based on 20 variables. I’m looking forward to analyzing along economic lines and see how expenditures (as found from the United Nations source) relate to life expectancy. My cleaning process is outlined in data_cleaning.R, and includes cleaning messy variable titles, renaming mislabeled variables, and assigning NA to values that were determined to be inaccurately filled in. Some missing values of note are those that replaced erroneous entries--national populations below 1000, expenditures of 0, and infant deaths of 0 were some values replaced with NA in addition to initially missing data. Though it is less informative to have missing data, it is more valuable than using misleading data. In total there are 4053 missing values (2563 before cleaning). The codebook details the exact number of missing values for each variable.**
+
+```{r, warning=FALSE}
+LED_clean <- read_csv("data/Processed/LED_cleaned.csv")
+```
+```{r, warning = FALSE}
+describe(LED_clean)
+```
+**This description is useful to have as a starting point to see what may be worth investigating. In particular, the number of values in each column is useful (how many values had to be represented as NA) and the standard deviations.** 
+
+# Initial Analysis
+**Below I plot every variable against the target variable. This is a starting point to see which variables seem to be predictors of life expectancy. My variables of interest are economic factors and alcohol consumption so I will address those as well.**
+<br><br>
+```{r, warning=FALSE}
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = adult_mortality, y = life_expectancy))
+#of note
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = infant_deaths, y = life_expectancy)) +
+  geom_smooth(mapping = aes(x = infant_deaths, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = alcohol, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = percentage_expenditure, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = hepatitis_b, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = bmi, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = under_five_deaths, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = polio, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = total_expenditure, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = diphtheria, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = hiv_aids, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = gdp, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = population, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = thinness_10_to_19_years, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = thinness_5_to_9_years, y = life_expectancy))
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = income_composition_of_resources, y = life_expectancy)) +
+  geom_smooth(mapping = aes(x = income_composition_of_resources, y = life_expectancy))
+#of note
+ggplot(LED_clean) +
+  geom_point(mapping = aes(x = schooling, y = life_expectancy)) + 
+  geom_smooth(mapping = aes(x = schooling, y = life_expectancy))
+#of note
+```
+<br><br>
+**A majority of these graphs indicate no apparent relationship. However we can see a positive relationship with life expectancy for both schooling and income composition of resources and a negative relationship with adult mortality**<br><br>
+```{r, warning=FALSE}
+ggplot(LED_clean) +
+  geom_bin2d(mapping = aes(x = schooling, y = income_composition_of_resources))
+```
+**We can see a very strong relationship appear here (noting outliers). Using geom_bin2d allows for a more informative and descriptive visual--we can see that the highest density falls along the line with a small spread shown by the darker blue outline. This is more informative than using geom_smooth as it demonstrates the densest points and spread. What is interesting about this conclusion is that income composition of resources attempts to describe a more individual level of economic prosperity of a country as opposed to nationwide economic growth. As there is a relationship here and not one with GDP, it may be able to inform policy**
+
+```{r, warning=FALSE}
+ggplot(LED_clean) +
+  geom_bin2d(mapping = aes(x = gdp, y = income_composition_of_resources))
+```
+
+**To confirm the lack of relationship between GDP and income composition of resources I used geom_bin2d again to see how they interacted and there is a clear lack of a strong relationship between the two. Why this result is particularly notable is that it shows there is a difference between which economic factors impact life expectancy and can inform how national and international funds are allocated.**
+
+```{r, warning=FALSE}
+ggplot(LED_clean) +
+  geom_bin2d(mapping = aes(x = adult_mortality, y = income_composition_of_resources))
+
+ggplot(LED_clean) +
+  geom_bin2d(mapping = aes(x = schooling, y = adult_mortality))
+
+```
+<br><br>
+**Income composition of resources also exhibits a negative correlation with adult mortality (noting that the density is highest along a linear curve). Adult mortality measured against schooling demonstrates less of a dramatic relationship, though definitively negative.**
+
+# Developed versus Developing and Economic Factors
+**The source of this data did not mention how developing versus developed was defined, though it does mention that the data was an assortment with components from the UN. Therefore I will use the UN's definition ("reflect basic economic country conditions") to understand the data.**
+```{r, warning = FALSE}
+qplot(life_expectancy, data = LED_clean, geom = "density",
+      color = status, linetype = status)
+# can see a clear pattern of higher life expectancy in developed countries (unsurprising)
+LED_clean %>%
+  count(status == "Developed")
+```
+**There is a very clear trend of developed countries having a higher life expectancy. This is not surprising as developed is defined in an economic sense, meaning that they have the resources to allocate to public health and safety. I used a density plot with different colors and linetypes to make the difference clear as well as to account for the fact that there is a far greater number of countries classified as developing than developed. Using density means that we see how the proportion of countries classified as developing is distributed as opposed to seeing sheer amounts which would present a misleading description of the distribution.** <br><br>
+**As developed versus developing is defined in economic terms, let's look at how economic variables interact.** <br><br>
+```{r, warning=FALSE}
+#using boxplot to see quartiles 
+ggplot(LED_clean, mapping = aes(x = gdp, y = percentage_expenditure)) +
+  geom_point() +
+  geom_smooth()
+```
+<br><br>
+**What is puzzling is that the relationship between gdp and percentage expenditure seems to be nearly linear. This would suggest that every country increases their allocation of resources to health at similar rates to one another. There is an obvious flaw in the actual number for percentages as they exceed 100, but as more than 70% of the values for percentage expenditure exceed 100, it may be useful to observe them as indicative of a trend and maybe mislabeled by the author.**
+```{r, warning=FALSE}
+ggplot(LED_clean, mapping = aes(x = percentage_expenditure, y = life_expectancy)) +
+  geom_boxplot()
+ggplot(LED_clean, mapping = aes(x = gdp, y = life_expectancy)) +
+  geom_boxplot()
+gdp_core <- LED_clean %>%
+  filter(gdp < 50000)
+ggplot(gdp_core, mapping = aes(x = gdp, y = life_expectancy)) + 
+  geom_boxplot(mapping = aes(group = cut_width(gdp, 5000)), varwidth = TRUE) 
+```
+
+**Here a boxplot was used despite GDP being continuous in order to demonstrate the quartiles and outliers clearly. Then, I used cutwidth to separate data into discrete bins and set varwidth equal to true so that equal numbers of values were in each grouping. The plot shows a relatively steady increase in average life expectancy as well as steady growth of the bottom quartile.**
+
+```{r, warning = FALSE}
+LED2015 <- LED_clean %>%
+  filter(year == 2015)
+
+ggplot(LED_clean, aes(x = schooling, y = life_expectancy)) +
+  geom_point(aes(color = status)) 
+
+ggplot(LED2015, aes(x = schooling, y = life_expectancy)) +
+  geom_text(aes(label = country, color = status)) +
+  coord_cartesian(xlim = c(15, 20)) +
+  coord_cartesian(ylim = c(80, 85))
+```
+<br><br>
+**After initially looking at the distribution of developed versus developing countries in terms of schooling using a color coded scatter plot, I zoomed into the upper right corner which revealed some outliers. I used geom_text to see which countries were notable. These countries (Germany, Canada, Finland, and France in particular) seem to be misclassed as develping. To test this, I looked at other economic metrics (as that is how their status is defined according to the UN).**
+```{r, warning = FALSE}
+ggplot(LED2015, aes(x = gdp, y = life_expectancy)) +
+  geom_text(aes(label = country, color = status)) +
+  coord_cartesian(ylim = c(70, 90))
+
+ggplot(LED2015, aes(x = gdp, y = life_expectancy)) +
+  geom_text(aes(label = country, color = status)) +
+  coord_cartesian(xlim = c(30000, 70000)) +
+  coord_cartesian(ylim = c(80, 90))
+            
+```
+<br><br>
+**This graph shows the same outlying countries as developing but with a high GDP as well--could indicate a mistake in classification.**
+
+# Effect of Alcohol
+**On a different note, but another area I thought worth exploring, is the effect of alcohol consumption on life expectancy**
+```{r, warning=FALSE}
+qplot(alcohol, data = LED_clean, geom = "density",
+      color = status, linetype = status)
+```
+<br><br>
+**An interesting plot--far higher recorded alcohol consumption in developed countries which may be counterintuitive as alcohol generally has health detriments associated. Again using a density plot when comparing developed to developing countries to account for the imbalance in numbers classified. Going to look into it with another metric**
+```{r, warning = FALSE}
+ggplot(LED_clean, mapping = aes(x = alcohol, y = life_expectancy)) +
+  geom_point() +
+  geom_smooth()
+```
+<br><br>
+**Does not reveal any meaningful trend when compared to life expectancy so suggests that it's an irrelevant relationship.**
+
+
+# Conclusion
+**Though this data has a lot of apparent errors in how it reported data, some useful conclusions can be drawn from this analysis. We can see how income composition of resources, GDP, and schooling interacted with one another and could be used as predictive variables for life expectancy. The relationship between GDP and life expectancy was not telling at all, and in fact, income composition of resources had a positive correlation with the latter as did schooling. When compared to one another, schooling and income composition of resources showed to also have a strong positive correlation with a high density along a linear relationship and showing a linear spread. GDP demonstrated less utility than other economic variables and pointed in a more promising direction.**
+
+
+
+
+
+
+
